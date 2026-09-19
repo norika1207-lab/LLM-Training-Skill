@@ -18,6 +18,7 @@
 
 - [為什麼需要它](#為什麼需要它)
 - [核心承諾](#核心承諾)
+- [最新基準：Bragi Asclepius × ISEEU](#最新基準bragi-asclepius--iseeu)
 - [快速開始](#快速開始)
 - [完整工作流](#完整工作流)
 - [Run 目錄與資料契約](#run-目錄與資料契約)
@@ -95,6 +96,45 @@ loss 只能回答最佳化器正在依照目標函數前進，不能直接回答
 ### 4. 不中斷不等於盲目一直跑
 
 持續工作代表：狀態可讀、工作可排隊、資源有鎖、checkpoint 可恢復、錯誤可重試、阻塞可標記、下一個安全工作能接續。它不代表為了讓 queue 看起來忙碌，就跳過 gate、猜測缺失資料或搶占正在服務的 GPU。
+
+## 最新基準：Bragi Asclepius × ISEEU
+
+這個 repo 的最新工作基準來自 Bragi Asclepius 主線；實際訓練目標仍然是 ISEEU。兩者的關係是：
+
+```text
+Bragi Asclepius：最新的研究方法、證據紀律、長跑與自動接棒方式
+                         │
+                         ▼
+ISEEU：實際要訓練、評測、部署的名片 OCR 模型
+```
+
+這個邊界很重要：Bragi 的 coding model、量化或模型手術結果，不會被寫成 ISEEU 成果；ISEEU 的 detector、line recognizer、欄位 pack 和 App gate 也必須各自量測。
+
+目前最新可核對的 ISEEU v6 candidate：
+
+| 項目 | 已核對狀態 |
+| --- | --- |
+| 方法 | CTC line recognizer，從零訓練 |
+| 裝置 | MPS |
+| train / valid | 96,409 / 9,951 rows |
+| 字表 / 參數 | 2,613 chars / 1,407,350 params |
+| checkpoint | `artifacts/recog-v6.pt`，已落地 epoch 12 |
+| model-only valid | exact 67.9228%，CER 0.116795 |
+| 產品 gate | 尚未完成，不能宣稱已贏 Apple 或可出貨 |
+| 續訓 | `v6-cont-20260919` 仍需 preflight、fingerprint、smoke |
+
+它示範了本 Skill 的核心分寸：checkpoint 已存在，就報 checkpoint；epoch 13 只有 partial batch log，就報 partial；沒有 real-card product eval，就明確寫 pending。這種分層報告比一個漂亮但不可追溯的「完成」更有價值。
+
+Bragi Asclepius 主線反覆驗證的工作循環是：
+
+1. 先讀正本路徑、程式和目前 artifact，不靠 session 記憶猜狀態。
+2. 先跑 preflight 與 smoke，讓第一個 checkpoint 在短時間內可載入、可評估。
+3. 長跑期間持續寫 log、heartbeat、checkpoint 與狀態檔；watcher 不只看 PID。
+4. 對每個漂亮結果主動找反證，尤其要用 real／hard／sealed 資料重算。
+5. 發現資料分布或評估尺錯了，先修假設與 evaluator，再決定是否繼續燒算力。
+6. 一輪結束後以 `continue`、`pivot`、`reject` 或 `blocked` 接棒，不讓 session 的結束等於工作的結束。
+
+詳細的最新主線、ISEEU v6 路徑與證據邊界，請讀 [`references/bragi-asclepius-latest.md`](references/bragi-asclepius-latest.md)。
 
 ## 快速開始
 
@@ -581,7 +621,7 @@ python3 scripts/skill_self_test.py
 推薦的第一句話：
 
 ```text
-先讀 mercury-model-training-ops/SKILL.md 與 references/claude-session-training-methods.md。
+先讀 mercury-model-training-ops/SKILL.md、references/bragi-asclepius-latest.md，再讀 references/claude-session-training-methods.md。
 不要直接開始大訓練。先建立 run manifest，完成資料／硬體 preflight，跑 smoke，
 提出 checkpoint 與 evaluator 計畫；之後每個 rung 都要留下可恢復證據，只有通過
 預先定義的 gate 才能 promote。
@@ -592,6 +632,7 @@ python3 scripts/skill_self_test.py
 ### 本 repo 內的文件
 
 - [`SKILL.md`](SKILL.md)：Codex Skill 入口與強制作業規則
+- [`references/bragi-asclepius-latest.md`](references/bragi-asclepius-latest.md)：目前最新的 Bragi Asclepius 工作基準、ISEEU v6 真實 checkpoint 狀態、路徑與 product gate 邊界
 - [`references/claude-session-training-methods.md`](references/claude-session-training-methods.md)：四個 Claude 訓練 session 的逐段方法萃取，包含 seed、real／synthetic、teacher／student、模型手術、watchdog 與負結果
 - [`references/continuous-runbook.md`](references/continuous-runbook.md)：durable queue、狀態 schema、資源鎖與恢復策略
 - [`references/external-integrations.md`](references/external-integrations.md)：TRL／Axolotl／Unsloth／distributed、tracking、registry、anti-overfit 與 Skill 自我測試的 adapter 規則

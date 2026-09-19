@@ -114,3 +114,5 @@ repo 內的 `scripts/continuous_worker.py` 是一個安全的本機最小 worker
 需要接入 TRL、Axolotl、LLaMA-Factory、Unsloth、Accelerate、FSDP、DeepSpeed、MLflow、W&B、Model Registry、quantization 或 Skill 自我測試時，讀 [references/external-integrations.md](references/external-integrations.md)。
 
 四個 Claude session「LLM 研究學者」「Bragi老師」「ISEEU OCR V1 老師 Retire」「ISEEU OCR V2.5 學生Rertire」的逐段訓練方法、證據、失敗案例、教師／學生交接、長跑排程與 watchdog 萃取，集中在 [references/claude-session-training-methods.md](references/claude-session-training-methods.md)。遇到模型訓練任務時，先讀該 reference，再依本 Skill 的 gate、checkpoint、queue 與交接格式執行。
+
+目前最新時間軸以 [references/bragi-asclepius-latest.md](references/bragi-asclepius-latest.md) 為準：它明確區分 Bragi／Asclepius 的最新方法基準與 ISEEU 的實際訓練目標，並記錄最新 v6 checkpoint、實際路徑、續訓 queue 與尚未完成的 product gate。遇到 ISEEU 或長跑訓練任務時，先讀該 reference，再讀歷史 session reference，最後依本 Skill 的 gate、checkpoint、queue 與交接格式執行。Bragi 的模型與權重不可被誤當成 ISEEU 的模型成果。

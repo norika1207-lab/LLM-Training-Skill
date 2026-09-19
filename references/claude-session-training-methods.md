@@ -1,6 +1,6 @@
 # Claude 四個訓練 Session 的可重用方法
 
-這份文件是從四個 Claude session 的原始 JSONL 逐段讀取後整理出的操作規則，不是從摘要反推。它把「如何把模型穩定訓練出來」拆成實驗設計、資料品質、老師／學生、長跑排程、驗收和交接六個面向。最新的 Bragi／Asclepius 狀態與 ISEEU v6 checkpoint 以同目錄的 `bragi-asclepius-latest.md` 為準；本文件中的退休 session 主要提供歷史脈絡與失敗證據。
+這份文件是從四個 Claude session 的原始 JSONL 逐段讀取後整理出的操作規則，不是從摘要反推。它把「如何把模型穩定訓練出來」拆成實驗設計、資料品質、老師／學生、長跑排程、驗收和交接六個面向。
 
 ## 來源與證據邊界
 
@@ -16,10 +16,6 @@
 - `親驗`：有命令、raw log、artifact 或磁碟檔可以重跑或核對。
 - `讀檔`：讀過程式、報告或 JSON，但這一輪沒有重新執行。
 - `轉述／假設`：來自另一個 session 的說法，不能直接當成模型成果。
-
-### 最新主線的身份邊界
-
-Bragi Asclepius 是目前最新的工作方法與訓練時間軸；ISEEU 是實際產品訓練目標。不要把 Bragi 的 1.5B coding model、量化、剪層或抗排斥藥成果寫成 ISEEU 的 checkpoint。ISEEU v6 的 model-only candidate、real-card evaluator 和 product gate 要各自記錄。
 
 歷史數字只作案例，不能直接當新專案門檻。新專案必須用自己的 sealed holdout、資料 fingerprint、設定 hash 和同一套 evaluator 重建基準。
 

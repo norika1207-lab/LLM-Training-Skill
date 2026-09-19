@@ -1,0 +1,7 @@
+interface:
+  display_name: "Mercury 模型訓練作業系統"
+  short_description: "穩定訓練、驗證、續跑與自動排程"
+  default_prompt: "Use $mercury-model-training-ops to run and supervise a reproducible model-training cycle."
+
+policy:
+  allow_implicit_invocation: true

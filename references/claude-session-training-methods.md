@@ -4,12 +4,12 @@
 
 ## 來源與證據邊界
 
-讀取的原始 session：
+讀取的原始 session（原始 JSONL 僅存在萃取者的本機工作環境，未隨 repo 發佈）：
 
-- `LLM 研究學者`：`/Users/norikaoda/.claude/projects/-Users-norikaoda/cdd3c24a-f845-4630-96d3-283d81ee14d9.jsonl`，1,461 行。
-- `Bragi老師`：`/Users/norikaoda/.claude/projects/-Users-norikaoda/7c1b7b0c-f86f-4945-bfce-6bacb9e8a978.jsonl`，3,054 行。
-- `ISEEU OCR V1 老師 Retire`：`/Users/norikaoda/.claude/projects/-Users-norikaoda/0c443214-0d09-48c8-b6d0-affd056a7c9b.jsonl`，11,279 行。
-- `ISEEU OCR V2.5 學生Rertire`：`/Users/norikaoda/.claude/projects/-Users-norikaoda/17cce3cf-6283-4d19-9ebc-186b6b3bb031.jsonl`，9,981 行。
+- `LLM 研究學者`：1,461 行。
+- `Bragi老師`：3,054 行。
+- `ISEEU OCR V1 老師 Retire`：11,279 行。
+- `ISEEU OCR V2.5 學生Rertire`：9,981 行。
 
 原始對話裡有些數字是 session 讀磁碟後親自跑出的，有些是交接轉述，有些是當時尚未驗證的假設。使用本文件時仍要保留三個標記：
 

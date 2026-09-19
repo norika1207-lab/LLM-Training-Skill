@@ -22,6 +22,7 @@
 - [完整工作流](#完整工作流)
 - [Run 目錄與資料契約](#run-目錄與資料契約)
 - [評估與 promotion 規則](#評估與-promotion-規則)
+- [外部框架與 MLOps 整合](#外部框架與-mlops-整合)
 - [持續訓練與自動排程](#持續訓練與自動排程)
 - [Teacher／Student 交接](#teacherstudent-交接)
 - [常見失敗與處理方式](#常見失敗與處理方式)
@@ -437,6 +438,21 @@ watcher 應該能辨識：
 
 如果由 Codex 或其他 agent 在對話外監控，提醒只在完成、失敗、狀態改變或需要人工處理時送出。狀態未變時不要刷屏。每次喚醒都讀 durable state，而不是依賴上一輪對話記憶。
 
+repo 內的 `scripts/continuous_worker.py` 是本機最小 worker：它只消費 JSONL 中尚未執行的 `queued` job、建立 run-level lock、把 stdout/stderr 寫入 run log，並以 append-only event 記錄 `running`、`checkpointed` 或 `rejected`。它不自行 promotion，也不會因 queue 空就虛構工作；真正的 evaluator 與 promotion 仍由 gate 控制。
+
+## 外部框架與 MLOps 整合
+
+這個 repo 已把外部 GitHub 專案中最有價值的能力納入設計，但採用 local-first、adapter 化，而不是把單一雲端服務或訓練框架綁死：
+
+- `Transformers + TRL` 作為 SFT／DPO／GRPO／distillation 的優先 backend；需要 recipe 時可接 Axolotl、LLaMA-Factory 或 Unsloth。
+- Accelerate、DDP、FSDP、DeepSpeed 或 Ray Train 只能在單機 smoke、resume、evaluator 都通過後引入。
+- local `events.jsonl`、`progress.json`、`metrics.jsonl` 是最低證據；MLflow、W&B、TensorBoard 是可選的 dashboard／遠端同步。
+- `release-manifest.json` 與 SHA-256 是真正的 artifact 身分；Model Registry 或 Hugging Face Hub alias 只是索引。
+- 每個 run 有 branch lifecycle 與 named next action；評估資料污染、hidden-answer 使用、fixture leakage 或 holdout 重複都會禁止 promotion。
+- Skill 本身要用 success、failure、regression、infra failure 與 negative case 做行為測試。
+
+詳細 adapter contract、tracking 降級、registry promotion 順序與 anti-overfit 規則，請讀 [`references/external-integrations.md`](references/external-integrations.md)。
+
 ## Teacher／Student 交接
 
 模型蒸餾或跨 session 協作時，使用檔案交接而不是口頭摘要：
@@ -500,6 +516,56 @@ python3 scripts/validate_training_run.py <run_dir>
 
 它是結構與證據檢查器，不是模型品質裁判。`exit 0` 代表結構符合檢查，仍然要由你的 evaluator 與產品 gate 判斷模型是否值得 promote。
 
+### `scripts/track_run.py`
+
+將長跑狀態以 append-only event 寫入 run，並更新 `progress.json`：
+
+```bash
+python3 scripts/track_run.py runs/receipt-sft-001 \
+  --state running --event batch_end --epoch 1 --batch 120 \
+  --loss 0.8421 --metric valid_exact=0.71 \
+  --checkpoint checkpoints/step-120.pt
+```
+
+### `scripts/compare_runs.py`
+
+比較多個 run 的 manifest 與 eval report，不會替缺失的 metric 補值：
+
+```bash
+python3 scripts/compare_runs.py runs/seed-17 runs/seed-23 runs/seed-41
+python3 scripts/compare_runs.py runs/seed-* --format json
+```
+
+### `scripts/promote_artifact.py`
+
+在明確的 validated eval report 之後建立 immutable release manifest。它會重新計算 artifact SHA-256，只有加上 `--confirm` 才會改變狀態：
+
+```bash
+python3 scripts/promote_artifact.py runs/receipt-sft-001 \
+  checkpoints/best.pt --eval-report eval/summary.json \
+  --decision promoted --confirm
+```
+
+### `scripts/continuous_worker.py`
+
+消費一個安全的 JSONL job queue。每筆 job 至少包含 `job_id`、`run_dir` 與 `command`；worker 會取得 lock、寫 log、保留 return code 與 append-only worker event，不會自動繞過 evaluator 或 promotion：
+
+```json
+{"job_id":"smoke-001","run_dir":"runs/smoke-001","command":["python3","train.py","--config","config.json"]}
+```
+
+```bash
+python3 scripts/continuous_worker.py jobs.jsonl --once
+```
+
+### `scripts/skill_self_test.py`
+
+不需要模型、GPU 或網路，直接測試 Skill 的 local-first contract：scaffold、tracking、checkpoint、eval report、promotion、validator 與 run comparison：
+
+```bash
+python3 scripts/skill_self_test.py
+```
+
 ## 如何在 Codex 中使用
 
 把任務交給 Codex 時，建議清楚提供：
@@ -528,6 +594,7 @@ python3 scripts/validate_training_run.py <run_dir>
 - [`SKILL.md`](SKILL.md)：Codex Skill 入口與強制作業規則
 - [`references/claude-session-training-methods.md`](references/claude-session-training-methods.md)：四個 Claude 訓練 session 的逐段方法萃取，包含 seed、real／synthetic、teacher／student、模型手術、watchdog 與負結果
 - [`references/continuous-runbook.md`](references/continuous-runbook.md)：durable queue、狀態 schema、資源鎖與恢復策略
+- [`references/external-integrations.md`](references/external-integrations.md)：TRL／Axolotl／Unsloth／distributed、tracking、registry、anti-overfit 與 Skill 自我測試的 adapter 規則
 - [`references/extracted-mercury-method.md`](references/extracted-mercury-method.md)：Mercury 方法與產品層／模型層分離的背景
 
 ### 四個 session 提煉出的核心教訓
@@ -578,5 +645,8 @@ python3 scripts/validate_training_run.py <run_dir>
 - [ ] regression 已通過，或 active 版本已安全回退
 - [ ] `STATUS.md`、`NEXT_ACTIONS.md` 與 blocker 已更新
 - [ ] 下一個人或下一個 session 可以不靠口頭記憶接手
+- [ ] local event log 存在，即使外部 tracker 不可用
+- [ ] branch lifecycle、contamination 狀態與 named next action 已記錄
+- [ ] promotion 使用 immutable release manifest，而不是 `latest` 檔名
 
 如果還不能勾完，不代表工作沒有價值；只代表它還是實驗，而不是可驗收的模型版本。把證據補齊，下一輪就會比上一輪更穩。

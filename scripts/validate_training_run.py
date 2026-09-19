@@ -40,13 +40,19 @@ def main() -> int:
         warnings.append("dataset fingerprint is not finalized")
     if manifest.get("vocab_hash") in (None, "", "pending"):
         warnings.append("vocab hash is not finalized")
+    lifecycle = manifest.get("lifecycle", {})
+    if lifecycle.get("branch_state") not in {None, "active", "promising", "plateaued", "dead", "superseded", "promoted"}:
+        errors.append("invalid lifecycle.branch_state")
+    tracking = manifest.get("tracking", {})
+    if tracking.get("provider", "local") != "local" and not (root / "events.jsonl").is_file():
+        warnings.append("external tracking configured without local events.jsonl fallback")
 
     checkpoints = list((root / "checkpoints").glob("*") if (root / "checkpoints").is_dir() else [])
     eval_files = list((root / "eval").glob("*") if (root / "eval").is_dir() else [])
     artifacts = list((root / "artifacts").glob("*") if (root / "artifacts").is_dir() else [])
     if manifest.get("status") in {"running", "checkpointed", "evaluating", "promoted"} and not checkpoints:
         errors.append("active/completed run has no checkpoint")
-    if manifest.get("status") in {"evaluating", "promoted", "rejected"} and not eval_files:
+    if manifest.get("status") in {"evaluating", "validated", "promoted", "rejected"} and not eval_files:
         errors.append("evaluated run has no eval output")
     if manifest.get("status") == "promoted" and not artifacts:
         errors.append("promoted run has no artifact")

@@ -5,7 +5,7 @@ description: "Run reproducible local model-training work with staged experiments
 
 # Mercury 模型訓練作業系統
 
-這個 Skill 把 Mercury「服務中控」Session 中反覆驗證過的訓練方法，固定成可重複執行的作業流程。目標不是把程序啟動，而是讓每一輪都有可追溯資料、可觀測進度、可恢復 checkpoint、獨立驗收與明確的升級／回退決策。
+這個 Skill 把 Mercury「服務中控」Session 中反覆驗證過的訓練方法，和外部 MLOps／LLM research tooling 的成熟做法，固定成可重複執行的作業流程。目標不是把程序啟動，而是讓每一輪都有可追溯資料、可觀測進度、可恢復 checkpoint、獨立驗收、實驗比較、模型註冊與明確的升級／回退決策。
 
 適用於本機或受控私有節點上的 SFT、LoRA、蒸餾、分類器／ranker、seq2seq、剪枝、量化、領域專家模型，以及需要跨小時或跨天持續執行的工作。除非使用者明確要求，不自動上雲、公開發佈、購買資源、刪除原始資料或改動正在服務的模型。
 
@@ -17,6 +17,8 @@ description: "Run reproducible local model-training work with staged experiments
 4. loss 下降只是必要條件，不是成功條件。每個重要 checkpoint 都要跑 validation 或小型真實 eval；只有 sealed holdout／產品回歸通過才可 promote。
 5. 失敗版本保留為證據，正式版本採 append-only timestamp 目錄。不得原地覆蓋上一個安全 artifact；先寫新版本、驗證、再更新指標或 symlink。
 6. 只把「能被上游看見的內容」交給 student 學習。OCR／VLM 沒有提供的欄位不得硬餵給 OCR-only 模型；不可見、錯標或 role 污染資料要進 failure bank／needs-review，而不是靜默修成漂亮分數。
+7. 外部 trainer、tracker、registry 都是 adapter，不是證據本身。遠端服務失效時必須仍保有 local JSONL、manifest、checkpoint、eval report 與 SHA-256；`latest`、`staging`、`production` alias 不能取代 immutable release manifest。
+8. 研究分支必須有生命週期與下一步：`active`、`promising`、`plateaued`、`dead`、`superseded`、`promoted`。dead branch 不刪除，因為它是防止重犯的 evidence；被污染的 holdout 或 evaluator 不得 promotion。
 
 ## 每次訓練的標準閉環
 
@@ -25,6 +27,8 @@ description: "Run reproducible local model-training work with staged experiments
 先回答：要保留哪個能力、輸入／輸出 schema、模型大小與延遲上限、允許的本機節點、產品禁區、基準模型、sealed holdout、最低 gate，以及什麼情況必須回退。把「研究 prototype」「可重跑 artifact」「可部署 runtime」「可公開產品」分成四種狀態。
 
 建立 run 目錄時可使用 `scripts/scaffold_run.py`；它會產生 `manifest.json`、`STATUS.md`、`queue.jsonl`、`checkpoints/`、`eval/`、`artifacts/`、`logs/`、`failure-bank/`。已有 run 不要重新 scaffold 覆蓋，改用新 timestamp 目錄或 resume。
+
+若要使用外部 trainer、tracking、registry、evaluation 或 Skill 自我測試，先讀 [references/external-integrations.md](references/external-integrations.md)。它定義 config-driven adapter、local-first tracking、promotion 順序、branch lifecycle 與 anti-overfit 規則。
 
 ### 2. 做資料與硬體 preflight
 
@@ -54,6 +58,8 @@ description: "Run reproducible local model-training work with staged experiments
 
 若數分鐘沒有 epoch，不要只等，也不要直接殺掉：先查 PID、CPU/GPU、RSS、磁碟寫入、最後 checkpoint 和 stdout。只有在「無進度且超過該配置的合理門檻」時才停止，並保留 partial artifact 與診斷原因。
 
+可用 `scripts/track_run.py` 將 heartbeat、metric、checkpoint 與狀態 append 到 `events.jsonl`，並同步更新 `progress.json`。這個 local event log 是 tracking backend 的最低保證；MLflow、W&B 或 TensorBoard 只能作為額外輸出。
+
 ### 5. 用證據選擇繼續、縮小或換路線
 
 - loss 正常下降、checkpoint 持續落地、valid 同步改善：讓目前 rung 完成，再決定是否加 epoch／容量。
@@ -81,6 +87,8 @@ description: "Run reproducible local model-training work with staged experiments
 
 若回歸下降，保留 rejected artifact 和完整 diff，active 版本回到上一個 validated 版本。每輪結束更新 `STATUS.md` 和 `NEXT_ACTIONS.md`，讓下一個 session 能從檔案接手，而不是重新掃聊天記憶。
 
+不要用複製檔案或改名冒充 promotion。使用 `scripts/promote_artifact.py` 時，必須提供有效 eval report、`decision=validated` 或 `promoted`，並明確傳入 `--confirm`；腳本會計算 SHA-256、建立 immutable release manifest，只有 `--decision promoted` 才更新 active pointer。
+
 ## 持續不中斷的工作隊列
 
 當使用者要求持續訓練、跨夜執行或自動安排時，建立 durable queue，不把所有工作塞進一個不可觀測 shell：
@@ -91,6 +99,8 @@ description: "Run reproducible local model-training work with staged experiments
 
 一個 job 被阻塞時，只標記它和原因（缺權限、缺模型、缺 GPU、gated download、資料錯誤），繼續跑安全且獨立的 jobs；不可為了維持「不中斷」而繞過 gate、猜測缺失資料或搶占正在服務的 GPU。若需要 Codex 在對話外持續監控，使用產品提供的 heartbeat／automation 機制，讓通知只在完成、失敗、狀態改變或需要使用者處置時發出；不要在狀態沒變時刷屏。
 
+repo 內的 `scripts/continuous_worker.py` 是一個安全的本機最小 worker：它只消費 JSONL 中尚未執行的 `queued` job、建立 run-level lock、把 stdout/stderr 寫入 run log，並以 append-only event 記錄 `running`、`checkpointed` 或 `rejected`。它不自行 promotion，也不會因 queue 空就虛構工作；真正的 evaluator 與 promotion 仍由 gate 控制。
+
 ## 交接時的固定回報格式
 
 回報先講狀態，再講證據：
@@ -100,5 +110,7 @@ description: "Run reproducible local model-training work with staged experiments
 禁止只回「還在跑」「已完成」「準確率很好」。若沒有 artifact、checkpoint、eval report 或 hash，就明確寫「尚未形成可驗收成果」。
 
 需要理解本 Skill 的來源方法與具體案例時，讀 [references/extracted-mercury-method.md](references/extracted-mercury-method.md)；需要建立長跑 queue、狀態 schema、資源鎖與恢復策略時，讀 [references/continuous-runbook.md](references/continuous-runbook.md)。
+
+需要接入 TRL、Axolotl、LLaMA-Factory、Unsloth、Accelerate、FSDP、DeepSpeed、MLflow、W&B、Model Registry、quantization 或 Skill 自我測試時，讀 [references/external-integrations.md](references/external-integrations.md)。
 
 四個 Claude session「LLM 研究學者」「Bragi老師」「ISEEU OCR V1 老師 Retire」「ISEEU OCR V2.5 學生Rertire」的逐段訓練方法、證據、失敗案例、教師／學生交接、長跑排程與 watchdog 萃取，集中在 [references/claude-session-training-methods.md](references/claude-session-training-methods.md)。遇到模型訓練任務時，先讀該 reference，再依本 Skill 的 gate、checkpoint、queue 與交接格式執行。

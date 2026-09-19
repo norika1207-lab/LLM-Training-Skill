@@ -28,7 +28,7 @@ def main() -> int:
     if root.exists() and any(root.iterdir()) and not args.force:
         raise SystemExit(f"refusing non-empty run directory: {root}")
     root.mkdir(parents=True, exist_ok=True)
-    for name in ("checkpoints", "eval", "artifacts", "logs", "locks", "data", "failure-bank"):
+    for name in ("checkpoints", "eval", "artifacts", "logs", "locks", "data", "failure-bank", "reports"):
         (root / name).mkdir(exist_ok=True)
 
     now = datetime.now(timezone.utc).isoformat()
@@ -54,6 +54,9 @@ def main() -> int:
         "device": args.device,
         "checkpoint_policy": {"every_batches": 20, "keep_best": 3},
         "gates": {"valid_metric": "pending", "product_metric": "pending", "max_regression": 0.01},
+        "lifecycle": {"branch_state": "active", "next_action": "preflight", "contamination": "unknown"},
+        "tracking": {"provider": "local", "events": "events.jsonl", "progress": "progress.json"},
+        "registry": {"provider": "local", "status": "candidate"},
         "status": "queued",
         "created_at": now,
     }

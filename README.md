@@ -650,3 +650,7 @@ python3 scripts/skill_self_test.py
 - [ ] promotion 使用 immutable release manifest，而不是 `latest` 檔名
 
 如果還不能勾完，不代表工作沒有價值；只代表它還是實驗，而不是可驗收的模型版本。把證據補齊，下一輪就會比上一輪更穩。
+
+---
+
+作者：織田紀香（Norika Oda）· https://norika.tw
